@@ -38,3 +38,28 @@ func (ss *EthData) GetTxByAddress(page, pagesize uint64, address string, action 
 	}
 	return txData, nil
 }
+
+func (ss *EthData) getBalanceByaddress(contractAddr, address string) (*account.AccountBalanceResponse, error) {
+	accountItem := []string{address}
+	symbol := []string{"ETH"}
+	contractAddress := []string{contractAddr}
+	protocolType := []string{""}
+	page := []string{"1"}
+	limit := []string{"10"}
+	acbr := &account.AccountBalanceRequest{
+		ChainShortName:  "ETH",
+		ExplorerName:    "etherescan",
+		Account:         accountItem,
+		Symbol:          symbol,
+		ContractAddress: contractAddress,
+		ProtocolType:    protocolType,
+		Page:            page,
+		Limit:           limit,
+	}
+	etherscanResp, err := ss.EthDataCli.GetAccountBalance(acbr)
+	if err != nil {
+		log.Error("get account balance error", "err:", err)
+		return nil, err
+	}
+	return etherscanResp, nil
+}

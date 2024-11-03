@@ -2,15 +2,18 @@ package ethereum
 
 import (
 	"context"
+	"math/big"
+	"strconv"
+	"time"
+
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/CavnHan/wallet-chain-account/chain"
 	"github.com/CavnHan/wallet-chain-account/config"
 	"github.com/CavnHan/wallet-chain-account/rpc/account"
 	"github.com/CavnHan/wallet-chain-account/rpc/common"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
-	"math/big"
-	"time"
 )
 
 //对接所有的RPC
@@ -54,6 +57,92 @@ func (c ChainAdaptor) ConvertAddress(req *account.ConvertAddressRequest) (*accou
 	}, nil
 }
 
+func (c *ChainAdaptor) GetBlockHeaderByHash(req *account.BlockHeaderHashRequest) (*account.BlockHeaderResponse, error) {
+	var blockHash ethcommon.Hash
+	if req.Hash == "" {
+		blockHash = ethcommon.Hash{}
+	} else {
+		blockHash = ethcommon.HexToHash(req.Hash)
+	}
+	blockInfo, err := c.ethClient.BlockHeaderByHash(blockHash)
+	if err != nil {
+		log.Error("get latest block header fail", "err", err)
+		return &account.BlockHeaderResponse{
+			Code: common.ReturnCode_ERROR,
+			Msg:  "get latest block header fail",
+		}, nil
+	}
+	blockHeader := &account.BlockHeader{
+		ParentHash:       blockInfo.ParentHash.String(),
+		UncleHash:        blockInfo.UncleHash.String(),
+		CoinBase:         blockInfo.Coinbase.String(),
+		Root:             blockInfo.Root.String(),
+		TxHash:           blockInfo.TxHash.String(),
+		ReceiptHash:      blockInfo.ReceiptHash.String(),
+		ParentBeaconRoot: blockInfo.ParentBeaconRoot.String(),
+		Difficulty:       blockInfo.Difficulty.String(),
+		Number:           blockInfo.Number.String(),
+		GasLimit:         blockInfo.GasLimit,
+		GasUsed:          blockInfo.GasUsed,
+		Time:             blockInfo.Time,
+		Extra:            string(blockInfo.Extra),
+		MixDigest:        blockInfo.MixDigest.String(),
+		Nonce:            strconv.FormatUint(blockInfo.Nonce.Uint64(), 10),
+		BaseFee:          blockInfo.BaseFee.String(),
+		WithdrawalsHash:  blockInfo.WithdrawalsHash.String(),
+		BlobGasUsed:      *blockInfo.BlobGasUsed,
+		ExcessBlobGas:    *blockInfo.ExcessBlobGas,
+	}
+	return &account.BlockHeaderResponse{
+		Code:        common.ReturnCode_SUCCESS,
+		Msg:         "get latest block header success",
+		BlockHeader: blockHeader,
+	}, nil
+}
+
+func (c ChainAdaptor) GetBlockHeaderByNumber(req *account.BlockHeaderNumberRequest) (*account.BlockHeaderResponse, error) {
+	var blockNumber *big.Int
+	if req.Height == 0 {
+		blockNumber = nil
+	} else {
+		blockNumber = big.NewInt(req.Height)
+	}
+	blockInfo, err := c.ethClient.BlockHeaderByNumber(blockNumber)
+	if err != nil {
+		log.Error("get latest block header fail !", "err:", err)
+		return &account.BlockHeaderResponse{
+			Code: common.ReturnCode_ERROR,
+			Msg:  "get lates block number fail",
+		}, nil
+	}
+	blockHeader := &account.BlockHeader{
+		ParentHash:       blockInfo.ParentHash.String(),
+		UncleHash:        blockInfo.UncleHash.String(),
+		CoinBase:         blockInfo.Coinbase.String(),
+		Root:             blockInfo.Root.String(),
+		TxHash:           blockInfo.TxHash.String(),
+		ReceiptHash:      blockInfo.ReceiptHash.String(),
+		ParentBeaconRoot: blockInfo.ParentBeaconRoot.String(),
+		Difficulty:       blockInfo.Difficulty.String(),
+		Number:           blockInfo.Number.String(),
+		GasLimit:         blockInfo.GasLimit,
+		GasUsed:          blockInfo.GasUsed,
+		Time:             blockInfo.Time,
+		Extra:            string(blockInfo.Extra),
+		MixDigest:        blockInfo.MixDigest.String(),
+		Nonce:            strconv.FormatUint(blockInfo.Nonce.Uint64(), 10),
+		BaseFee:          blockInfo.BaseFee.String(),
+		WithdrawalsHash:  blockInfo.WithdrawalsHash.String(),
+		BlobGasUsed:      *blockInfo.BlobGasUsed,
+		ExcessBlobGas:    *blockInfo.ExcessBlobGas,
+	}
+	return &account.BlockHeaderResponse{
+		Code:        common.ReturnCode_SUCCESS,
+		Msg:         "get latest block header success",
+		BlockHeader: blockHeader,
+	}, nil
+}
+
 func (c ChainAdaptor) GetBlockByNumber(req *account.BlockNumberRequest) (*account.BlockResponse, error) {
 	block, err := c.ethClient.BlockByNumber(big.NewInt(req.Height))
 	if err != nil {
@@ -94,19 +183,34 @@ func (c ChainAdaptor) GetBlockByHash(req *account.BlockHashRequest) (*account.Bl
 	panic("implement me")
 }
 
-func (c ChainAdaptor) GetBlockHeaderByHash(req *account.BlockHeaderHashRequest) (*account.BlockHeaderResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (c ChainAdaptor) GetBlockHeaderByNumber(req *account.BlockHeaderNumberRequest) (*account.BlockHeaderResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (c ChainAdaptor) GetAccount(req *account.AccountRequest) (*account.AccountResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	nonceResult, err := c.ethClient.TxCountByAddress(ethcommon.HexToAddress(req.Address))
+	if err != nil {
+		log.Error("get nonce by account fail", "err:", err)
+		return &account.AccountResponse{
+			Code: common.ReturnCode_ERROR,
+			Msg:  "get nonce by address fail",
+		}, nil
+	}
+	//获取balance
+	//合约地址或者普通账户
+	balanceResult, err := c.ethDataClient.getBalanceByaddress(req.ContractAddress, req.Address)
+	if err != nil {
+		log.Error("get balance by address fail", "err:", err)
+		return &account.AccountResponse{
+			Code:    common.ReturnCode_ERROR,
+			Msg:     "get balance by address fail",
+			Balance: "0",
+		}, err
+	}
+	return &account.AccountResponse{
+		Code:          common.ReturnCode_SUCCESS,
+		Msg:           "get account response success",
+		AccountNumber: "0",
+		Sequence:      nonceResult.String(),
+		Balance:       balanceResult.BalanceStr,
+	}, nil
+
 }
 
 func (c ChainAdaptor) GetFee(req *account.FeeRequest) (*account.FeeResponse, error) {
